@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/joho/godotenv"
 
@@ -29,11 +31,31 @@ func main() {
 		Port:     os.Getenv(model.EnvRedisPort),
 		Password: os.Getenv(model.EnvRedisPassword),
 	}
+	if cfgRedis.Host == "" {
+		log.Error("can't get host from env")
+		return
+	}
+	if cfgRedis.Port == "" {
+		log.Error("can't get port from env")
+		return
+	}
 
-	rdb := redis.Connect(cfgRedis)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	rdb, err := redis.Connect(ctx, cfgRedis)
+	if err != nil {
+		log.Error("can't connect to  redis: " + err.Error())
+		return
+	}
 
 	log.Info(rdb.String())
 
+	proxies := os.Getenv(model.EnvProxyUrls)
+	if proxies == "" {
+		log.Error("can't get proxies from env: " + err.Error())
+		return
+	}
 	proxyUrls := strings.Split(os.Getenv(model.EnvProxyUrls), ",")
 
 	riaScrapper := ria.NewScrapper(rdb, log, proxyUrls)

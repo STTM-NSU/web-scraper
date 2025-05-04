@@ -2,8 +2,8 @@ package ria
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"log/slog"
 	"regexp"
@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/proxy"
 	"github.com/redis/go-redis/v9"
@@ -114,13 +115,10 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 		}
 	})
 	c.OnHTML("div.recommend__place", func(e *colly.HTMLElement) {
-		idStr := e.Request.URL.String()[len(e.Request.URL.String())-15:]
-		id, err := strconv.Atoi(idStr[:10])
+		partition, err := getPartition(e.Request.URL.String(), model.PartitionsCount)
 		if err != nil {
-			s.logger.Error("can't get article id: " + err.Error())
-			return
+			s.logger.Error("can't grt partition" + err.Error())
 		}
-		partition := id % model.PartitionsCount
 		redisChanel := model.RedisChanelName + strconv.Itoa(partition)
 		date, ok := articlesDate.Load(e.Request.URL.String())
 		if !ok {
@@ -132,8 +130,8 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 			s.logger.Error("no text", e.Request.URL.String())
 			return
 		}
-		redisMessage, err := json.Marshal(model.ScrapperPayload{
-			Date: date.(time.Time).Format(time.RFC3339),
+		redisMessage, err := sonic.Marshal(model.ScrapperPayload{
+			Date: date.(time.Time).Format("2006-01-02T15:00:00Z00:00"),
 			Text: strings.Join(text.([]string), " "),
 		})
 		if err != nil {
@@ -143,7 +141,7 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 		if err != nil {
 			s.logger.Error("can't publish article: " + err.Error())
 			var mes model.ScrapperPayload
-			err := json.Unmarshal(redisMessage, &mes)
+			err := sonic.Unmarshal(redisMessage, &mes)
 			if err != nil {
 				s.logger.Error("can't unmarshal message: " + err.Error())
 			}
@@ -186,16 +184,13 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 
 	s.logger.Info("scraped", slog.String("date", date.Format("02.01.2006")), slog.Int("count", counter))
 
-	//for k, v := range articles {
-	//	fmt.Println(k + ": " + v)
-	//}
-	//fmt.Println(len(articles))
-	//for k, v := range articles {
-	//	err = s.rdb.Publish(ctx, "scrapper", articlesDate[k].Format(time.RFC3339)+" "+strings.Join(v, " ")).Err()
-	//	if err != nil {
-	//		return fmt.Errorf("cann't publish article: %w", err)
-	//	}
-	//}
-
 	return nil
+}
+
+func getPartition(url string, partitionN int) (int, error) {
+	h := fnv.New32()
+	if _, err := h.Write([]byte(url)); err != nil {
+		return 0, fmt.Errorf("%w: can't write url", err)
+	}
+	return int(h.Sum32()) % partitionN, nil
 }
