@@ -80,7 +80,7 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 
 	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 		link := e.Request.AbsoluteURL(e.Attr("href"))
-		if link != "" && !strings.Contains(link, "?") {
+		if link != "" && !strings.Contains(link, "?") && !strings.Contains(link, "#") {
 			err := e.Request.Visit(link)
 			if err != nil {
 				return
