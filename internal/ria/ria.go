@@ -64,6 +64,7 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 		),
 		colly.Async(true),
 	)
+	c.Context = ctx
 
 	err := c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
@@ -157,10 +158,10 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 		}
 	})
 	c.OnRequest(func(request *colly.Request) {
-		//if !strings.Contains(request.URL.String(), "more.html") {
+		// if !strings.Contains(request.URL.String(), "more.html") {
 		//
 		//	fmt.Println(request.ProxyURL, request.URL, counter)
-		//}
+		// }
 
 	})
 	c.OnError(func(response *colly.Response, err error) {
@@ -168,7 +169,7 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 			return
 		}
 		s.logger.Error("can't visit article " + err.Error())
-		//fmt.Println(response.Request.Ctx)
+		// fmt.Println(response.Request.Ctx)
 
 		if strings.Contains(err.Error(), "Too Many Requests") {
 			time.Sleep(10 * time.Second)
@@ -194,7 +195,7 @@ func (s *Scrapper) Scrap(ctx context.Context, day string) error {
 		if !strings.Contains(response.Request.URL.String(), "more.html") {
 
 		}
-		//fmt.Println(response.Request.ProxyURL)
+		// fmt.Println(response.Request.ProxyURL)
 	})
 
 	date, err := time.Parse("20060102", day)
