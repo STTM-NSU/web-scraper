@@ -6,15 +6,19 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 
+	"github.com/STTM-NSU/web-scrapper/internal/config"
 	"github.com/STTM-NSU/web-scrapper/internal/db/redis"
 	"github.com/STTM-NSU/web-scrapper/internal/model"
+	"github.com/STTM-NSU/web-scrapper/internal/proxy"
 	"github.com/STTM-NSU/web-scrapper/internal/ria"
 )
+
+const _configFileName = "./config.yaml"
 
 func main() {
 	log := slog.New(
@@ -51,18 +55,46 @@ func main() {
 
 	log.Info(rdb.String())
 
-	proxies := os.Getenv(model.EnvProxyUrls)
-	if proxies == "" {
-		log.Error("can't get proxies from env: " + err.Error())
+	cfg, err := config.LoadConfig(_configFileName)
+	if err != nil {
+		log.Error("can't load config: " + err.Error())
 		return
 	}
-	proxyUrls := strings.Split(os.Getenv(model.EnvProxyUrls), ",")
 
-	riaScrapper := ria.NewScrapper(rdb, log, proxyUrls)
-	fmt.Println(riaScrapper)
+	fmt.Println(cfg)
 
-	if err := riaScrapper.Scrap(context.Background(), "20250305"); err != nil {
-		log.Error("can't scrap ria " + err.Error())
+	proxySwitcher, err := proxy.MyRoundRobinProxySwitcher(os.Getenv(model.EnvProxyUrls), log, cfg.ProxyRecoverTimeOut)
+	if err != nil {
+		log.Error("can't get proxy: " + err.Error())
+		return
 	}
+
+	riaScrapper := ria.NewScrapper(rdb, log, proxySwitcher, cfg.RedisChanelName, cfg.PartitionsCount)
+	go proxySwitcher.Run(ctx)
+	go proxySwitcher.RunForRecover(ctx)
+
+	var done bool
+	go func() {
+		data := cfg.StartDateScrapping
+		for !done {
+
+			if err := riaScrapper.Scrap(context.Background(), data.Format("20060102")); err != nil {
+				log.Error("can't scrap ria " + err.Error())
+			}
+			if data.Format("20060102") == time.Now().Format("20060102") {
+				time.Sleep(1 * time.Hour)
+			} else {
+				data = data.Add(24 * time.Hour)
+			}
+
+		}
+	}()
+	//if err := riaScrapper.Scrap(context.Background(), "20250305"); err != nil {
+	//	log.Error("can't scrap ria " + err.Error())
+	//}
+
+	<-ctx.Done()
+	log.Info("start graceful shutdown")
+	done = true
 
 }
