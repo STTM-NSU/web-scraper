@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -60,8 +59,6 @@ func main() {
 		log.Error("can't load config: " + err.Error())
 		return
 	}
-
-	fmt.Println(cfg)
 
 	proxySwitcher, err := proxy.MyRoundRobinProxySwitcher(os.Getenv(model.EnvProxyUrls), log, cfg.ProxyRecoverTimeOut)
 	if err != nil {

@@ -123,8 +123,13 @@ func (r *MyRoundRobinSwitcher) Run(ctx context.Context) {
 					for i := range r.recoverPool {
 						if r.proxyURLs[i].String() == v.Url.String() {
 							r.proxyURLs = append(r.proxyURLs, r.recoverPool[i])
-							r.recoverPool = append(r.recoverPool[:i], r.recoverPool[i+1:]...)
-							r.logger.Info("Add proxy to recoverPool", slog.String("url", v.Url.String()),
+							if len(r.recoverPool) == 1 {
+								r.recoverPool = []*url.URL{}
+							} else {
+								r.recoverPool = append(r.recoverPool[:i], r.recoverPool[i+1:]...)
+							}
+
+							r.logger.Info("Add proxy to proxyURLs", slog.String("url", v.Url.String()),
 								slog.Int("proxy accessible", len(r.proxyURLs)),
 								slog.Int("proxy inaccessible", len(r.recoverPool)))
 							if len(r.proxyURLs) == 1 {
@@ -147,8 +152,12 @@ func (r *MyRoundRobinSwitcher) Run(ctx context.Context) {
 					for i := range r.proxyURLs {
 						if r.proxyURLs[i].String() == v.Url.String() {
 							r.recoverPool = append(r.recoverPool, r.proxyURLs[i])
-							r.proxyURLs = append(r.proxyURLs[:i], r.proxyURLs[i+1:]...)
-							r.logger.Info("Delete proxy from recoverPool", slog.String("proxy", v.Url.Host),
+							if len(r.proxyURLs) == 1 {
+								r.proxyURLs = []*url.URL{}
+							} else {
+								r.proxyURLs = append(r.proxyURLs[:i], r.proxyURLs[i+1:]...)
+							}
+							r.logger.Info("Delete proxy from proxyURLs", slog.String("proxy", v.Url.Host),
 								slog.Int("proxy accessible", len(r.proxyURLs)),
 								slog.Int("proxy inaccessible", len(r.recoverPool)))
 							break
